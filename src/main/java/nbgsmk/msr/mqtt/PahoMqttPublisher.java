@@ -13,7 +13,9 @@ public final class PahoMqttPublisher implements MqttPublisher {
     private final MqttClient client;
     private final MqttConnectOptions options;
     private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor();
+    private static final long CONNECTION_DIAGNOSTIC_THROTTLE_MILLIS = 10_000L;
     private volatile Throwable lastError;
+    private volatile long lastConnectionDiagnosticAt;
     private volatile boolean closed;
 
     public PahoMqttPublisher(String broker, String clientId) throws Exception {
@@ -31,7 +33,11 @@ public final class PahoMqttPublisher implements MqttPublisher {
             lastError = null;
         } catch (Exception error) {
             lastError = error;
-            System.err.println("MQTT connection unavailable: " + safeMessage(error));
+            long now = System.currentTimeMillis();
+            if (now - lastConnectionDiagnosticAt >= CONNECTION_DIAGNOSTIC_THROTTLE_MILLIS) {
+                lastConnectionDiagnosticAt = now;
+                System.err.println("MQTT connection unavailable: " + safeMessage(error));
+            }
             scheduleReconnect();
         }
     }

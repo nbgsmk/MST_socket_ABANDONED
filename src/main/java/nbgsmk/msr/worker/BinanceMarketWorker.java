@@ -92,10 +92,7 @@ public final class BinanceMarketWorker implements Worker {
                     ",\"low\":" + quote(k.path("l").asText()) + ",\"close\":" + quote(k.path("c").asText()) +
                     ",\"volume\":" + quote(k.path("v").asText()) + ",\"closed\":" + closed + "}";
             publisher.publish(closed ? config.mqtt().candlesTopic() : config.mqtt().liveTopic(), payload);
-            System.out.println((closed ? "CLOSED" : "LIVE") + " symbol=" + k.path("s").asText()
-                    + " interval=" + k.path("i").asText() + " close=" + k.path("c").asText()
-                    + " eventTime=" + root.path("data").path("E").asLong()
-                    + " closeTime=" + k.path("T").asLong());
+            System.out.println((closed ? "CLOSED " : "LIVE ") + message);
         } catch (Exception e) {
             lastError = e;
             System.err.println("Kline parsing error: " + safeMessage(e));

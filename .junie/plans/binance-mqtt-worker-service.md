@@ -144,7 +144,7 @@ The headless process prints actionable startup, lifecycle, error, and candle sum
 - Print compact `LIVE` and `CLOSED` candle summaries from the existing parsed kline path, including symbol, interval, close price, and relevant timestamps.
 - Keep console formatting defensive and non-sensitive, and verify logging with fake publisher/message inputs plus an offline startup run.
 
-### Step 6: Reduce MQTT outage noise and print raw Binance candles
+### ✓ Step 6: Reduce MQTT outage noise and print raw Binance candles
 MQTT outages produce at most one connection-unavailable diagnostic per configured throttle window, and candle monitoring prints each received Binance JSON message unchanged.
 - Update `PahoMqttPublisher` to retain the timestamp of the last connection-unavailable diagnostic and suppress duplicate messages until the throttle interval elapses, while preserving background reconnect attempts and `lastError` tracking.
 - Keep publish-failure handling and MQTT routing behavior unchanged; only repeated console diagnostics are suppressed.
