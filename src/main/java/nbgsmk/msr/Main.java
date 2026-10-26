@@ -4,6 +4,7 @@ import nbgsmk.msr.config.AppConfig;
 import nbgsmk.msr.config.ConfigLoader;
 import nbgsmk.msr.http.ControlHttpServer;
 import nbgsmk.msr.manager.ApplicationManager;
+import nbgsmk.msr.manager.LiveCandleSettings;
 import nbgsmk.msr.mqtt.PahoMqttPublisher;
 import nbgsmk.msr.worker.BinanceMarketWorker;
 
@@ -18,8 +19,9 @@ public final class Main {
         AppConfig config = ConfigLoader.load(configPath);
         System.out.println("Configuration loaded; initial state=" + config.initialState());
         PahoMqttPublisher publisher = new PahoMqttPublisher(config.mqtt().broker(), config.mqtt().clientId());
-        BinanceMarketWorker worker = new BinanceMarketWorker(config, publisher);
-        ApplicationManager manager = new ApplicationManager(config, worker);
+        LiveCandleSettings settings = new LiveCandleSettings(config);
+        BinanceMarketWorker worker = new BinanceMarketWorker(config, publisher, settings);
+        ApplicationManager manager = new ApplicationManager(config, worker, settings);
         ControlHttpServer http = new ControlHttpServer(config.http().host(), config.http().port(), manager);
         CountDownLatch keepAlive = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -36,4 +38,5 @@ public final class Main {
         System.out.println("Application started; entering keep-alive wait");
         keepAlive.await();
     }
+
 }

@@ -25,6 +25,12 @@ class ControlHttpServerTest {
                 assertEquals(200, request(port, path, "GET"));
                 assertEquals(200, request(port, path, "POST"));
             }
+            assertEquals(200, request(port, "/live-candles", "GET"));
+            assertEquals(200, request(port, "/live-candles?systemLog=false&mqtt=true", "POST"));
+            assertEquals(false, manager.liveCandleSettings().systemLog());
+            assertEquals(true, manager.liveCandleSettings().mqtt());
+            assertEquals(400, request(port, "/live-candles?systemLog=maybe", "GET"));
+            assertEquals(400, request(port, "/live-candles?unknown=true", "GET"));
             assertEquals(405, request(port, "/status", "PUT"));
             assertEquals(405, request(port, "/start", "DELETE"));
         }

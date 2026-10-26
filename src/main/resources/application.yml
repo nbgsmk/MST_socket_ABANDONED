@@ -9,8 +9,11 @@ mqtt:
   liveTopic: live
   candlesTopic: candles
   loggingTopic: logging
+  publishLiveCandles: true
 http:
   host: "127.0.0.1"
   port: 8080
 initialState: start
 reconnectDelaySeconds: 5
+systemLog:
+  liveCandles: true

@@ -5,6 +5,11 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigLoaderTest {
+    @Test void loadsNestedLivePublicationSetting() throws Exception {
+        AppConfig config = ConfigLoader.load(null);
+        assertTrue(config.mqtt().publishLiveCandles());
+        assertTrue(config.systemLog().liveCandles());
+    }
     @Test void loadsDefaults() throws Exception {
         AppConfig config = ConfigLoader.load(null);
         assertEquals(2, config.binance().streams().size());

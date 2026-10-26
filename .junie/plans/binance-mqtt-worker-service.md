@@ -24,7 +24,9 @@ Build a standalone, headless Java process that loads YAML configuration, connect
 - Publish socket/worker transitions, failures, and control actions to `logging`.
 - Print concise console messages for application startup, HTTP server readiness, worker/socket transitions, errors, and each live or closed candle so the headless process can be monitored without MQTT or a browser.
 - Throttle repeated MQTT connection-unavailable diagnostics so an outage does not flood the console.
-- Print the Binance candle message received from the WebSocket as-is, using clearly different console messages for live and closed candles.
+- Print the Binance candle message received from the WebSocket as-is, using clearly different console messages for live and closed candles when live console output is enabled.
+- Independently configure whether non-final live candles are printed to `System.out` and whether they are published to the MQTT `live` topic using the YAML keys `systemLog.liveCandles` and `mqtt.publishLiveCandles`; closed-candle output and publishing remain unchanged.
+- Expose browser-friendly runtime endpoints to get and change both live-candle controls without restarting the process; runtime changes affect only subsequent non-final candles and do not alter closed-candle behavior.
 - Respect configured initial state at startup and make stop safe to call repeatedly; stopping must disconnect or disable the stream worker without terminating the JVM.
 - HTTP control must be usable when no browser is connected and must report current desired state, actual worker/socket state, uptime, last error, and stream information.
 - Every existing HTTP endpoint (`/status`, `/start`, `/stop`, `/restart`) must accept both `GET` and `POST`, so browser address-bar navigation can perform controls without changing response semantics.
@@ -41,26 +43,29 @@ The repository is a single Java Gradle module with the implementation already pr
 - Use the JDK WebSocket client for Binance and `com.sun.net.httpserver.HttpServer` for the native local HTTP API, avoiding a web framework.
 - Use Eclipse Paho MQTT for broker connectivity and a YAML library such as Jackson YAML for typed configuration; these are new Gradle dependencies.
 - Keep the manager as the lifecycle authority, with thread-safe state transitions and a dedicated worker executor; worker callbacks update observable status but never decide process termination.
+- Keep runtime live-candle settings in a thread-safe mutable control object owned by `ApplicationManager`; initialize it from YAML and inject the settings view into `BinanceMarketWorker`, so HTTP updates are visible immediately without rebuilding the worker.
 - Make MQTT availability non-fatal: do not require a successful constructor connection, reconnect asynchronously with bounded backoff, and record the last MQTT error without throwing through `Main`, HTTP handlers, or WebSocket callbacks.
 - Treat each worker start/restart as a distinct connection generation so callbacks and reconnect tasks from an older socket cannot clear or replace the current socket after a later restart/stop.
 
 ### Proposed Changes
 Create a configuration bootstrap that loads a default classpath YAML and optionally a configured external path, validates non-empty stream/topic/broker values, and supplies immutable settings to the manager. Refactor the MQTT publisher so broker refusal is captured as an unavailable state, reconnect occurs in the background, and publish attempts are safe while disconnected. The manager must construct the publisher, worker, and HTTP server, apply the initial state, and enter its keep-alive wait even when MQTT is unavailable.
 
-Preserve the existing lightweight console logging and change only the requested console behavior: keep throttled MQTT connection diagnostics and have `BinanceMarketWorker` print the validated original Binance message with distinct live-candle and closed-candle labels. Logging must not throw, block WebSocket callbacks, or alter MQTT routing.
+Preserve the existing lightweight console logging and make live-candle visibility configurable: add explicit YAML-backed flags for live `System.out` output and live MQTT publishing. In `BinanceMarketWorker.handleMessage`, apply those flags only to non-final klines; retain closed-candle MQTT publishing and `CLOSED` raw JSON output. Logging must not throw, block WebSocket callbacks, or alter closed-candle routing.
 
 Implement a `BinanceMarketWorker` that builds the combined-stream URL from the configured base URL and stream list, opens the WebSocket, parses kline payloads, reconnects after unexpected closure with bounded delay, and exposes `RUNNING`, `STOPPED`, `STARTING`, `STOPPING`, and `ERROR` status. Associate sockets and scheduled reconnects with a generation/token, ignore stale close/error/connect callbacks, cancel or invalidate pending reconnect work on stop, and ensure stop closes the currently active socket. Inject a `MqttPublisher` so worker logic is testable without a broker; publish structured JSON envelopes containing event type, symbol, interval, timestamps, OHLCV fields, final/closed flag, and error/status details as appropriate.
 
-Implement HTTP handlers for JSON responses and control commands at `/status`, `/start`, `/stop`, and `/restart`, accepting both `GET` and `POST` for each path. Preserve the existing JSON status/command responses and map unsupported methods to clear 405 responses, invalid transitions or malformed requests to 4xx responses, and internal failures to 5xx responses. Keep the server independent of browser presence and shut it down only during JVM shutdown handling.
+Implement HTTP handlers for JSON responses and control commands at `/status`, `/start`, `/stop`, and `/restart`, accepting both `GET` and `POST` for each path. Add a browser-friendly settings endpoint, such as `GET`/`POST /live-candles`, that returns both current flags and accepts query parameters `systemLog` and `mqtt` with boolean values. Preserve the existing JSON status/command responses and map unsupported methods, missing or invalid boolean parameters, and unknown settings to clear 4xx responses; internal failures remain 5xx responses. Keep the server independent of browser presence and shut it down only during JVM shutdown handling.
 
 ### Data Models / Contracts
 - `Worker`: lifecycle and status abstraction usable by any replacement worker.
 - `ApplicationManager`: `start()`, `stop()`, `restart()`, `status()`, `uptime()`, `lastError()`, and worker replacement through constructor injection.
-- `AppConfig`: Binance URL/streams, MQTT broker/client/topics, HTTP host/port, initial desired state, reconnect settings.
+- `AppConfig`: Binance URL/streams, MQTT broker/client/topics plus `publishLiveCandles`, HTTP host/port, initial desired state, reconnect settings, and the console live-candle control bound from `systemLog.liveCandles`.
 - `WorkerStatus` and `ManagerStatus`: desired state, actual state, socket state, uptime, configured streams, last error, and timestamps.
 - MQTT payload contracts: live kline event, closed candle event, and logging/status event serialized as JSON.
-- Console output contract: informational lines identify startup/readiness, worker transitions, and visibly distinct `LIVE` versus `CLOSED` raw Binance candle messages; error lines identify MQTT, WebSocket, parsing, and shutdown failures without exposing credentials.
+- Console output contract: informational lines identify startup/readiness, worker transitions, and visibly distinct `LIVE` versus `CLOSED` raw Binance candle messages when enabled; error lines identify MQTT, WebSocket, parsing, and shutdown failures without exposing credentials.
+- Live-candle controls: `systemLog.liveCandles` controls raw `LIVE` console lines and `mqtt.publishLiveCandles` binds to `MqttConfig.publishLiveCandles` for publication to the configured `liveTopic`; both default to enabled when omitted.
 - `MqttPublisher`: connection state and last error; broker refusal must not escape application startup or control requests.
+- Runtime live-candle settings contract: thread-safe `systemLog` and `mqtt` booleans initialized from `AppConfig`, exposed in status/settings JSON, and updated atomically by the HTTP server; closed-candle routing/output ignores these flags.
 
 ### File Structure
 - Modify `build.gradle.kts` with YAML, Paho, and JSON/test dependencies.
@@ -103,12 +108,14 @@ Use JUnit tests with mocked/fake WebSocket and MQTT interfaces, plus an in-proce
 - Stop/restart are idempotent and update manager status/logging without terminating the process.
 - WebSocket closure/error causes an error status and reconnect attempt; MQTT refusal is reflected in status without failing `Main`, and reconnect resumes publishing.
 - Both `GET` and `POST` requests to `/status` return uptime and state, while both methods on `/start`, `/stop`, and `/restart` invoke the manager and return appropriate results.
+- The live-candle settings endpoint returns current `systemLog` and MQTT publication values, accepts valid browser-friendly updates, rejects missing/invalid values, and subsequent live klines follow the new settings without restart; closed klines remain printed and published.
 
 ### Edge Cases
 - Empty or duplicate streams, malformed Binance JSON, unknown event types, repeated commands, connection failure before startup, MQTT unavailable at startup, MQTT loss after connection, publish during reconnect, and shutdown while reconnecting.
 - Verify console logging remains safe for malformed/error messages and does not terminate the process.
 - Verify the main process remains alive after worker stop and after recoverable errors.
 - Exercise several consecutive restarts followed by stop and verify the worker remains `STOPPED`, `socketState` remains `DISCONNECTED`, and no stale reconnect callback starts a new connection.
+- Exercise runtime live-candle reads and updates through both accepted HTTP methods, invalid boolean values, independent flag combinations, and closed-candle behavior after each combination.
 
 # Delivery Steps
 
@@ -173,3 +180,33 @@ After repeated restarts, a stop command leaves the Binance worker stopped and di
 - Associate `WebSocket.Listener` callbacks and scheduled reconnect tasks with their generation; ignore callbacks from old sockets and prevent them from nulling or replacing the current socket.
 - Cancel or invalidate pending reconnect attempts during stop, and close the socket belonging to the active generation before reporting `STOPPED`.
 - Add focused worker/manager tests using controllable fake sockets or callbacks for repeated restart sequences followed by stop, asserting stable `STOPPED`/`DISCONNECTED` state and no reconnect after stop.
+
+### ✓ Step 10: Make live-candle output and MQTT publication configurable
+`application.yml` can independently disable live-candle console lines and/or MQTT `live` publication without affecting closed candles.
+- Extend `AppConfig` and `ConfigLoader` binding with the YAML keys `systemLog.liveCandles` and `mqtt.publishLiveCandles`, defaulting to `true` when omitted.
+- Add `systemLog.liveCandles: true` and `mqtt.publishLiveCandles: true` to `src/main/resources/application.yml` and document that `false` suppresses only non-final live klines.
+- Update `BinanceMarketWorker.handleMessage` to conditionally publish the reconstructed live payload and conditionally print the original raw `LIVE` message; always preserve closed-candle publication and `CLOSED` output.
+- Add focused tests for all four flag combinations, asserting live topic/output behavior and unchanged closed-candle behavior; retain existing defaults for current deployments.
+
+### ✓ Step 11: Move live MQTT publication configuration under the MQTT section
+The YAML contract uses `mqtt.publishLiveCandles`, and the Java MQTT configuration model exposes the renamed setting.
+- Move `mqttPublishLiveCandles: true` under `mqtt:` in `src/main/resources/application.yml` and rename it to `publishLiveCandles`.
+- Move the Boolean field from the top-level `AppConfig` record into `AppConfig.MqttConfig`, defaulting it to `true` when omitted.
+- Update `BinanceMarketWorker` to read `config.mqtt().publishLiveCandles()` while preserving closed-candle publication regardless of the flag.
+- Update all `AppConfig` constructors, YAML binding expectations, and worker tests to use the nested MQTT property.
+- Add or adjust configuration tests to verify the nested key loads correctly and the old root-level key is no longer required.
+
+### ✓ Step 12: Add runtime controls for live-candle console and MQTT output
+The running service exposes browser-friendly controls that independently toggle live console output and live MQTT publication without restarting.
+- Add a thread-safe runtime settings holder initialized from `AppConfig.systemLog.liveCandles` and `AppConfig.mqtt.publishLiveCandles`.
+- Update `ApplicationManager`, `BinanceMarketWorker`, and the HTTP layer so worker message handling reads the current settings for each kline.
+- Add `GET`/`POST /live-candles` returning both current values and accepting boolean query parameters for `systemLog` and `mqtt`.
+- Preserve existing lifecycle endpoints and ensure closed candles are always printed and published.
+- Add tests for reads, independent updates, invalid requests, both HTTP verbs, and behavior changes on subsequent live messages.
+
+### ✓ Step 13: Preserve YAML defaults while keeping browser controls runtime-only
+The YAML values remain permanent startup configuration, while `/live-candles` changes affect only the current JVM and never rewrite `application.yml`.
+- Keep `mqtt.publishLiveCandles` and `systemLog.liveCandles` in `src/main/resources/application.yml` and bind them as startup defaults.
+- Ensure `LiveCandleSettings` is the only mutable runtime state used by the worker and HTTP endpoint; do not serialize or persist endpoint updates.
+- Clarify `/live-candles` responses and documentation as runtime overrides, with a process restart reloading the YAML values.
+- Add tests that update both flags through HTTP, verify the running worker uses the overrides, and verify the YAML resource/configuration remains unchanged and defaults are restored by a fresh configuration load.

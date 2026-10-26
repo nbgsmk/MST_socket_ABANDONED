@@ -11,13 +11,19 @@ public final class ApplicationManager implements AutoCloseable {
     private final Worker worker;
     private final AppConfig config;
     private final ReentrantLock lifecycle = new ReentrantLock();
+    private final LiveCandleSettings liveCandleSettings;
     private final Instant startedAt = Instant.now();
     private volatile String desiredState;
     private volatile Throwable lastError;
 
     public ApplicationManager(AppConfig config, Worker worker) {
+        this(config, worker, new LiveCandleSettings(config));
+    }
+
+    public ApplicationManager(AppConfig config, Worker worker, LiveCandleSettings liveCandleSettings) {
         this.config = config;
         this.worker = worker;
+        this.liveCandleSettings = liveCandleSettings;
         this.desiredState = config.initialState().toLowerCase();
     }
 
@@ -41,6 +47,7 @@ public final class ApplicationManager implements AutoCloseable {
 
     public Duration uptime() { return Duration.between(startedAt, Instant.now()); }
     public Throwable lastError() { return lastError != null ? lastError : worker.lastError(); }
+    public LiveCandleSettings liveCandleSettings() { return liveCandleSettings; }
     public void applyInitialState() { if ("start".equals(desiredState)) start(); else stop(); }
     @Override public void close() { stop(); }
 }

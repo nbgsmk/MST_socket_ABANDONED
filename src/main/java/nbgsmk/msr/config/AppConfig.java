@@ -7,9 +7,11 @@ public record AppConfig(
         MqttConfig mqtt,
         HttpConfig http,
         String initialState,
-        int reconnectDelaySeconds
+        int reconnectDelaySeconds,
+        SystemLogConfig systemLog
 ) {
     public AppConfig {
+        if (systemLog == null) systemLog = new SystemLogConfig(true);
         if (binance == null || binance.streams() == null || binance.streams().isEmpty()) {
             throw new IllegalArgumentException("binance.streams must not be empty");
         }
@@ -33,7 +35,26 @@ public record AppConfig(
         }
     }
 
+    public AppConfig(BinanceConfig binance, MqttConfig mqtt, HttpConfig http,
+                     String initialState, int reconnectDelaySeconds) {
+        this(binance, mqtt, http, initialState, reconnectDelaySeconds, new SystemLogConfig(true));
+    }
+
     public record BinanceConfig(String baseUrl, List<String> streams) {}
-    public record MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic, String loggingTopic) {}
+    public record MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic,
+                             String loggingTopic, Boolean publishLiveCandles) {
+        public MqttConfig {
+            if (publishLiveCandles == null) publishLiveCandles = true;
+        }
+
+        public MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic, String loggingTopic) {
+            this(broker, clientId, liveTopic, candlesTopic, loggingTopic, true);
+        }
+    }
     public record HttpConfig(String host, int port) {}
+    public record SystemLogConfig(Boolean liveCandles) {
+        public SystemLogConfig {
+            if (liveCandles == null) liveCandles = true;
+        }
+    }
 }

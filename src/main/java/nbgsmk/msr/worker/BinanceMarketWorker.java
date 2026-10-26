@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import nbgsmk.msr.config.AppConfig;
 import nbgsmk.msr.mqtt.MqttPublisher;
+import nbgsmk.msr.manager.LiveCandleSettings;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 public final class BinanceMarketWorker implements Worker {
     private final AppConfig config;
     private final MqttPublisher publisher;
+    private final LiveCandleSettings liveCandleSettings;
     private final ObjectMapper mapper = new ObjectMapper();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor();
@@ -30,7 +32,11 @@ public final class BinanceMarketWorker implements Worker {
     private volatile ScheduledFuture<?> reconnectTask;
 
     public BinanceMarketWorker(AppConfig config, MqttPublisher publisher) {
-        this.config = config; this.publisher = publisher;
+        this(config, publisher, new LiveCandleSettings(config));
+    }
+
+    public BinanceMarketWorker(AppConfig config, MqttPublisher publisher, LiveCandleSettings liveCandleSettings) {
+        this.config = config; this.publisher = publisher; this.liveCandleSettings = liveCandleSettings;
     }
 
     public String streamUrl() { return config.binance().baseUrl() + String.join("/", config.binance().streams()); }
@@ -114,8 +120,12 @@ public final class BinanceMarketWorker implements Worker {
                     ",\"open\":" + quote(k.path("o").asText()) + ",\"high\":" + quote(k.path("h").asText()) +
                     ",\"low\":" + quote(k.path("l").asText()) + ",\"close\":" + quote(k.path("c").asText()) +
                     ",\"volume\":" + quote(k.path("v").asText()) + ",\"closed\":" + closed + "}";
-            publisher.publish(closed ? config.mqtt().candlesTopic() : config.mqtt().liveTopic(), payload);
-            System.out.println((closed ? "CLOSED " : "LIVE ") + message);
+            if (closed || liveCandleSettings.mqtt()) {
+                publisher.publish(closed ? config.mqtt().candlesTopic() : config.mqtt().liveTopic(), payload);
+            }
+            if (closed || liveCandleSettings.systemLog()) {
+                System.out.println((closed ? "CLOSED " : "LIVE ") + message);
+            }
         } catch (Exception e) {
             lastError = e;
             System.err.println("Kline parsing error: " + safeMessage(e));
