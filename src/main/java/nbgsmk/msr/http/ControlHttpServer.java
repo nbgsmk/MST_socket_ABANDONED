@@ -27,7 +27,7 @@ public final class ControlHttpServer implements AutoCloseable {
     public void start() { server.start(); }
 
     private void status(HttpExchange exchange) throws IOException {
-        if (!"GET".equals(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
+        if (!allowedMethod(exchange)) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
         ManagerStatus s = manager.status();
         String error = s.lastError() == null ? "null" : quote(s.lastError());
         String json = "{\"desiredState\":" + quote(s.desiredState()) + ",\"workerState\":" + quote(s.workerState().name()) +
@@ -38,7 +38,7 @@ public final class ControlHttpServer implements AutoCloseable {
     }
 
     private void command(HttpExchange exchange, String command) throws IOException {
-        if (!"POST".equals(exchange.getRequestMethod())) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
+        if (!allowedMethod(exchange)) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
         try {
             switch (command) { case "start" -> manager.start(); case "stop" -> manager.stop(); case "restart" -> manager.restart(); default -> throw new IllegalArgumentException(command); }
             send(exchange, 200, "{\"ok\":true,\"command\":" + quote(command) + "}");
@@ -51,6 +51,11 @@ public final class ControlHttpServer implements AutoCloseable {
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (var output = exchange.getResponseBody()) { output.write(bytes); }
+    }
+
+    private static boolean allowedMethod(HttpExchange exchange) {
+        String method = exchange.getRequestMethod();
+        return "GET".equals(method) || "POST".equals(method);
     }
 
     private static String quote(String value) { return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""; }
