@@ -1,0 +1,39 @@
+package nbgsmk.msr.config;
+
+import java.util.List;
+
+public record AppConfig(
+        BinanceConfig binance,
+        MqttConfig mqtt,
+        HttpConfig http,
+        String initialState,
+        int reconnectDelaySeconds
+) {
+    public AppConfig {
+        if (binance == null || binance.streams() == null || binance.streams().isEmpty()) {
+            throw new IllegalArgumentException("binance.streams must not be empty");
+        }
+        if (binance.baseUrl() == null || binance.baseUrl().isBlank()) {
+            throw new IllegalArgumentException("binance.baseUrl must not be blank");
+        }
+        if (mqtt == null || mqtt.broker() == null || mqtt.broker().isBlank()) {
+            throw new IllegalArgumentException("mqtt.broker must not be blank");
+        }
+        if (mqtt.liveTopic().isBlank() || mqtt.candlesTopic().isBlank() || mqtt.loggingTopic().isBlank()) {
+            throw new IllegalArgumentException("mqtt topics must not be blank");
+        }
+        if (http == null || http.port() < 1 || http.port() > 65535) {
+            throw new IllegalArgumentException("http.port must be between 1 and 65535");
+        }
+        if (!"start".equalsIgnoreCase(initialState) && !"stop".equalsIgnoreCase(initialState)) {
+            throw new IllegalArgumentException("initialState must be start or stop");
+        }
+        if (reconnectDelaySeconds < 0) {
+            throw new IllegalArgumentException("reconnectDelaySeconds must not be negative");
+        }
+    }
+
+    public record BinanceConfig(String baseUrl, List<String> streams) {}
+    public record MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic, String loggingTopic) {}
+    public record HttpConfig(String host, int port) {}
+}

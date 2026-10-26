@@ -1,0 +1,16 @@
+binance:
+  baseUrl: "wss://fstream.binance.com/market/stream?streams="
+  streams:
+    - btcusdt@kline_1m
+    - ethusdt@kline_1m
+mqtt:
+  broker: "tcp://localhost:1883"
+  clientId: "binance-market-worker"
+  liveTopic: live
+  candlesTopic: candles
+  loggingTopic: logging
+http:
+  host: "127.0.0.1"
+  port: 8080
+initialState: start
+reconnectDelaySeconds: 5

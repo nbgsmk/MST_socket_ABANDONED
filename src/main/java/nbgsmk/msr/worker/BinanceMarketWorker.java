@@ -1,0 +1,116 @@
+package nbgsmk.msr.worker;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import nbgsmk.msr.config.AppConfig;
+import nbgsmk.msr.mqtt.MqttPublisher;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.WebSocket;
+import java.time.Instant;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+public final class BinanceMarketWorker implements Worker {
+    private final AppConfig config;
+    private final MqttPublisher publisher;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor();
+    private volatile WorkerStatus status = WorkerStatus.STOPPED;
+    private volatile Throwable lastError;
+    private volatile WebSocket socket;
+    private volatile boolean requested;
+
+    public BinanceMarketWorker(AppConfig config, MqttPublisher publisher) {
+        this.config = config; this.publisher = publisher;
+    }
+
+    public String streamUrl() { return config.binance().baseUrl() + String.join("/", config.binance().streams()); }
+
+    @Override public synchronized void start() {
+        if (requested) return;
+        requested = true; status = WorkerStatus.STARTING; publishLog("STARTING", null);
+        System.out.println("Worker STARTING; streams=" + config.binance().streams());
+        executor.execute(this::connect);
+    }
+
+    private void connect() {
+        if (!requested) return;
+        try {
+            socket = HttpClient.newHttpClient().newWebSocketBuilder().buildAsync(URI.create(streamUrl()), new Listener()).join();
+            status = WorkerStatus.RUNNING; publishLog("RUNNING", null);
+            System.out.println("Worker RUNNING; socket connected");
+        } catch (Throwable error) { fail(error); }
+    }
+
+    @Override public synchronized void stop() {
+        requested = false; status = WorkerStatus.STOPPING; publishLog("STOPPING", null);
+        System.out.println("Worker STOPPING");
+        WebSocket current = socket; socket = null;
+        if (current != null) current.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
+        status = WorkerStatus.STOPPED; publishLog("STOPPED", null);
+        System.out.println("Worker STOPPED");
+    }
+
+    @Override public void restart() { stop(); start(); }
+    @Override public WorkerStatus status() { return status; }
+    @Override public Throwable lastError() { return lastError; }
+    @Override public String socketState() { return socket == null ? "DISCONNECTED" : "CONNECTED"; }
+    @Override public void close() { stop(); executor.shutdownNow(); reconnect.shutdownNow(); publisher.close(); }
+
+    private void fail(Throwable error) {
+        lastError = error; status = WorkerStatus.ERROR; publishLog("ERROR", error.getMessage());
+        System.err.println("Worker ERROR: " + safeMessage(error));
+        if (requested) {
+            System.out.println("Worker reconnect scheduled in " + config.reconnectDelaySeconds() + " seconds");
+            reconnect.schedule(this::connect, config.reconnectDelaySeconds(), TimeUnit.SECONDS);
+        }
+    }
+
+    private void publishLog(String event, String error) {
+        String detail = error == null ? "null" : quote(error);
+        publisher.publish(config.mqtt().loggingTopic(), "{\"event\":\"" + event + "\",\"timestamp\":\"" + Instant.now() + "\",\"error\":" + detail + "}");
+    }
+
+    private static String quote(String value) { return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""; }
+
+    void handleMessage(String message) {
+        try {
+            JsonNode root = mapper.readTree(message);
+            JsonNode k = root.path("data").path("k");
+            if (!"kline".equals(root.path("data").path("e").asText()) || k.isMissingNode()) return;
+            boolean closed = k.path("x").asBoolean(false);
+            String payload = "{\"event\":\"kline\",\"symbol\":" + quote(k.path("s").asText()) +
+                    ",\"interval\":" + quote(k.path("i").asText()) + ",\"eventTime\":" + root.path("data").path("E").asLong() +
+                    ",\"openTime\":" + k.path("t").asLong() + ",\"closeTime\":" + k.path("T").asLong() +
+                    ",\"open\":" + quote(k.path("o").asText()) + ",\"high\":" + quote(k.path("h").asText()) +
+                    ",\"low\":" + quote(k.path("l").asText()) + ",\"close\":" + quote(k.path("c").asText()) +
+                    ",\"volume\":" + quote(k.path("v").asText()) + ",\"closed\":" + closed + "}";
+            publisher.publish(closed ? config.mqtt().candlesTopic() : config.mqtt().liveTopic(), payload);
+            System.out.println((closed ? "CLOSED" : "LIVE") + " symbol=" + k.path("s").asText()
+                    + " interval=" + k.path("i").asText() + " close=" + k.path("c").asText()
+                    + " eventTime=" + root.path("data").path("E").asLong()
+                    + " closeTime=" + k.path("T").asLong());
+        } catch (Exception e) {
+            lastError = e;
+            System.err.println("Kline parsing error: " + safeMessage(e));
+            publishLog("ERROR", e.getMessage());
+        }
+    }
+
+    private static String safeMessage(Throwable error) {
+        String message = error == null ? null : error.getMessage();
+        return message == null || message.isBlank() ? error.getClass().getSimpleName() : message;
+    }
+
+    private final class Listener implements WebSocket.Listener {
+        public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) { if (last) handleMessage(data.toString()); webSocket.request(1); return null; }
+        public void onError(WebSocket webSocket, Throwable error) { fail(error); }
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) { socket = null; if (requested) fail(new IllegalStateException("closed: " + reason)); return null; }
+    }
+}
