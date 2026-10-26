@@ -24,7 +24,7 @@ Build a standalone, headless Java process that loads YAML configuration, connect
 - Publish socket/worker transitions, failures, and control actions to `logging`.
 - Print concise console messages for application startup, HTTP server readiness, worker/socket transitions, errors, and each live or closed candle so the headless process can be monitored without MQTT or a browser.
 - Throttle repeated MQTT connection-unavailable diagnostics so an outage does not flood the console.
-- Print the Binance candle message received from the WebSocket as-is for live and closed candle monitoring.
+- Print the Binance candle message received from the WebSocket as-is, using clearly different console messages for live and closed candles.
 - Respect configured initial state at startup and make stop safe to call repeatedly; stopping must disconnect or disable the stream worker without terminating the JVM.
 - HTTP control must be usable when no browser is connected and must report current desired state, actual worker/socket state, uptime, last error, and stream information.
 - The process must continue waiting indefinitely after startup and after worker failures; manager commands must not terminate the application.
@@ -44,7 +44,7 @@ The repository is a single Java Gradle module with the implementation already pr
 ### Proposed Changes
 Create a configuration bootstrap that loads a default classpath YAML and optionally a configured external path, validates non-empty stream/topic/broker values, and supplies immutable settings to the manager. Refactor the MQTT publisher so broker refusal is captured as an unavailable state, reconnect occurs in the background, and publish attempts are safe while disconnected. The manager must construct the publisher, worker, and HTTP server, apply the initial state, and enter its keep-alive wait even when MQTT is unavailable.
 
-Preserve the existing lightweight console logging and change only the noisy/verbose portions: throttle repeated MQTT connection-unavailable diagnostics in `PahoMqttPublisher`, and have `BinanceMarketWorker` print the validated original Binance message for live or closed candles rather than a reconstructed summary. Logging must not throw, block WebSocket callbacks, or alter MQTT routing.
+Preserve the existing lightweight console logging and change only the requested console behavior: keep throttled MQTT connection diagnostics and have `BinanceMarketWorker` print the validated original Binance message with distinct live-candle and closed-candle labels. Logging must not throw, block WebSocket callbacks, or alter MQTT routing.
 
 Implement a `BinanceMarketWorker` that builds the combined-stream URL from the configured base URL and stream list, opens the WebSocket, parses kline payloads, reconnects after unexpected closure with bounded delay, and exposes `RUNNING`, `STOPPED`, `STARTING`, `STOPPING`, and `ERROR` status. Inject a `MqttPublisher` so worker logic is testable without a broker; publish structured JSON envelopes containing event type, symbol, interval, timestamps, OHLCV fields, final/closed flag, and error/status details as appropriate.
 
@@ -56,7 +56,7 @@ Implement HTTP handlers for JSON responses and control commands such as `GET /st
 - `AppConfig`: Binance URL/streams, MQTT broker/client/topics, HTTP host/port, initial desired state, reconnect settings.
 - `WorkerStatus` and `ManagerStatus`: desired state, actual state, socket state, uptime, configured streams, last error, and timestamps.
 - MQTT payload contracts: live kline event, closed candle event, and logging/status event serialized as JSON.
-- Console output contract: informational lines identify startup/readiness, worker transitions, and `LIVE`/`CLOSED` candle summaries; error lines identify MQTT, WebSocket, parsing, and shutdown failures without exposing credentials.
+- Console output contract: informational lines identify startup/readiness, worker transitions, and visibly distinct `LIVE` versus `CLOSED` raw Binance candle messages; error lines identify MQTT, WebSocket, parsing, and shutdown failures without exposing credentials.
 - `MqttPublisher`: connection state and last error; broker refusal must not escape application startup or control requests.
 
 ### File Structure
@@ -96,7 +96,7 @@ Use JUnit tests with mocked/fake WebSocket and MQTT interfaces, plus an in-proce
 ### Key Scenarios
 - YAML loads configured streams, topics, initial state, and server settings; invalid required values fail with actionable errors.
 - Worker start opens the configured combined stream even when MQTT is unavailable; kline events use the documented offline publish policy and resume publishing after reconnection.
-- Startup and HTTP readiness produce console messages, worker transitions are visible, and both non-final and final kline messages print the expected compact summaries.
+- Startup and HTTP readiness produce console messages, worker transitions are visible, and non-final and final kline messages print the original JSON with different `LIVE` and `CLOSED` console messages.
 - Stop/restart are idempotent and update manager status/logging without terminating the process.
 - WebSocket closure/error causes an error status and reconnect attempt; MQTT refusal is reflected in status without failing `Main`, and reconnect resumes publishing.
 - HTTP `GET /status` returns uptime and state, while start/stop/restart endpoints invoke the manager and return appropriate results.
@@ -150,3 +150,9 @@ MQTT outages produce at most one connection-unavailable diagnostic per configure
 - Keep publish-failure handling and MQTT routing behavior unchanged; only repeated console diagnostics are suppressed.
 - Update `BinanceMarketWorker.handleMessage` to print the original WebSocket `message` after validating it as a kline, with a `LIVE` or `CLOSED` label if needed, and remove the reconstructed formatted candle summary.
 - Extend worker/publisher-focused tests to verify raw JSON visibility and that repeated failed connection attempts do not emit an unbounded stream of identical diagnostics.
+
+### ✓ Step 7: Distinguish closed-candle console output
+Closed candle notifications are visibly different from live candle notifications while retaining the raw Binance JSON.
+- Update the `closed` branch in `BinanceMarketWorker.handleMessage` so its `System.out` message uses an explicit closed-candle label distinct from the live-candle label.
+- Preserve the existing `k.x` classification, MQTT topic routing, payload format, and raw message content.
+- Extend `BinanceMarketWorkerTest` to capture output for both non-final and final kline messages and assert that their console labels differ.
