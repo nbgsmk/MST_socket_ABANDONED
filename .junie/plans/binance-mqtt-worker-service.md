@@ -167,7 +167,7 @@ The browser can use either address-bar `GET` requests or `POST` requests for sta
 - Keep manager invocation, JSON payloads, status codes for successful commands, and unsupported-method handling unchanged.
 - Extend `ControlHttpServerTest` with HTTP-level checks for both verbs on status and lifecycle endpoints, including repeated/idempotent commands and rejection of an unrelated method.
 
-### Step 9: Make repeated restart and stop lifecycle-safe
+### ✓ Step 9: Make repeated restart and stop lifecycle-safe
 After repeated restarts, a stop command leaves the Binance worker stopped and disconnected with no stale asynchronous callback able to revive it.
 - Update `BinanceMarketWorker` lifecycle coordination so every start/restart creates a new connection generation and stop invalidates the current generation.
 - Associate `WebSocket.Listener` callbacks and scheduled reconnect tasks with their generation; ignore callbacks from old sockets and prevent them from nulling or replacing the current socket.

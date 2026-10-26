@@ -13,6 +13,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public final class BinanceMarketWorker implements Worker {
@@ -25,6 +26,8 @@ public final class BinanceMarketWorker implements Worker {
     private volatile Throwable lastError;
     private volatile WebSocket socket;
     private volatile boolean requested;
+    private volatile long generation;
+    private volatile ScheduledFuture<?> reconnectTask;
 
     public BinanceMarketWorker(AppConfig config, MqttPublisher publisher) {
         this.config = config; this.publisher = publisher;
@@ -36,20 +39,33 @@ public final class BinanceMarketWorker implements Worker {
         if (requested) return;
         requested = true; status = WorkerStatus.STARTING; publishLog("STARTING", null);
         System.out.println("Worker STARTING; streams=" + config.binance().streams());
-        executor.execute(this::connect);
+        long currentGeneration = ++generation;
+        executor.execute(() -> connect(currentGeneration));
     }
 
-    private void connect() {
-        if (!requested) return;
+    private void connect(long currentGeneration) {
+        if (!isCurrent(currentGeneration)) return;
         try {
-            socket = HttpClient.newHttpClient().newWebSocketBuilder().buildAsync(URI.create(streamUrl()), new Listener()).join();
+            WebSocket connected = HttpClient.newHttpClient().newWebSocketBuilder()
+                    .buildAsync(URI.create(streamUrl()), new Listener(currentGeneration)).join();
+            synchronized (this) {
+                if (!isCurrent(currentGeneration)) {
+                    connected.sendClose(WebSocket.NORMAL_CLOSURE, "stale connection");
+                    return;
+                }
+                socket = connected;
+            }
             status = WorkerStatus.RUNNING; publishLog("RUNNING", null);
             System.out.println("Worker RUNNING; socket connected");
-        } catch (Throwable error) { fail(error); }
+        } catch (Throwable error) { fail(currentGeneration, error); }
     }
 
     @Override public synchronized void stop() {
-        requested = false; status = WorkerStatus.STOPPING; publishLog("STOPPING", null);
+        requested = false;
+        ++generation;
+        if (reconnectTask != null) reconnectTask.cancel(false);
+        reconnectTask = null;
+        status = WorkerStatus.STOPPING; publishLog("STOPPING", null);
         System.out.println("Worker STOPPING");
         WebSocket current = socket; socket = null;
         if (current != null) current.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
@@ -63,12 +79,19 @@ public final class BinanceMarketWorker implements Worker {
     @Override public String socketState() { return socket == null ? "DISCONNECTED" : "CONNECTED"; }
     @Override public void close() { stop(); executor.shutdownNow(); reconnect.shutdownNow(); publisher.close(); }
 
-    private void fail(Throwable error) {
+    private synchronized boolean isCurrent(long currentGeneration) {
+        return requested && generation == currentGeneration;
+    }
+
+    private void fail(long currentGeneration, Throwable error) {
+        if (!isCurrent(currentGeneration)) return;
         lastError = error; status = WorkerStatus.ERROR; publishLog("ERROR", error.getMessage());
         System.err.println("Worker ERROR: " + safeMessage(error));
-        if (requested) {
+        synchronized (this) {
+            if (isCurrent(currentGeneration)) {
             System.out.println("Worker reconnect scheduled in " + config.reconnectDelaySeconds() + " seconds");
-            reconnect.schedule(this::connect, config.reconnectDelaySeconds(), TimeUnit.SECONDS);
+                reconnectTask = reconnect.schedule(() -> connect(currentGeneration), config.reconnectDelaySeconds(), TimeUnit.SECONDS);
+            }
         }
     }
 
@@ -106,8 +129,35 @@ public final class BinanceMarketWorker implements Worker {
     }
 
     private final class Listener implements WebSocket.Listener {
-        public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) { if (last) handleMessage(data.toString()); webSocket.request(1); return null; }
-        public void onError(WebSocket webSocket, Throwable error) { fail(error); }
-        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) { socket = null; if (requested) fail(new IllegalStateException("closed: " + reason)); return null; }
+        private final long listenerGeneration;
+
+        private Listener(long listenerGeneration) { this.listenerGeneration = listenerGeneration; }
+
+        public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+            if (isCurrent(listenerGeneration) && last) handleMessage(data.toString());
+            webSocket.request(1);
+            return null;
+        }
+
+        public void onError(WebSocket webSocket, Throwable error) { failIfCurrent(webSocket, listenerGeneration, error); }
+
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            if (isCurrent(listenerGeneration)) {
+                synchronized (BinanceMarketWorker.this) {
+                    if (socket == webSocket) socket = null;
+                }
+                fail(listenerGeneration, new IllegalStateException("closed: " + reason));
+            }
+            return null;
+        }
+    }
+
+    private void failIfCurrent(WebSocket webSocket, long currentGeneration, Throwable error) {
+        if (isCurrent(currentGeneration)) {
+            synchronized (this) {
+                if (socket == null || socket == webSocket) socket = null;
+            }
+            fail(currentGeneration, error);
+        }
     }
 }
