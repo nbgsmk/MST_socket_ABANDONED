@@ -23,14 +23,15 @@ Make the Docker Compose deployment of production `Main` observable and reliably 
 - `Main2` is not containerized or included in the Compose workflow.
 - The application uses a configurable MQTT hostname/address rather than assuming `localhost`; the app remains alive if MQTT is temporarily unavailable.
 - Host users can access the HTTP control API on a documented port and inspect application logs with Compose commands.
-- Configuration remains YAML-based and can be overridden per stack without modifying the application resource defaults.
+- Configuration remains YAML-based, with one shared `src/main/resources/application.yml` used by IntelliJ and Docker.
+- The MQTT broker endpoint and HTTP bind host are configurable through environment overrides, supporting local defaults and container/external-network deployment without a second YAML file.
 - The MQTT broker endpoint is configurable independently of the image, supporting a Podman-published host address, a fixed external IP/DNS name, or another reachable network endpoint.
 - Container shutdown propagates cleanly to the existing JVM shutdown hooks; the application restart policy applies to process/container failure rather than worker lifecycle commands.
 
 # Technical Design
 
 ### Current Implementation
-The project is a single Gradle Java module using `build.gradle.kts`, Jackson YAML, Eclipse Paho, the JDK WebSocket client, and native `HttpServer`. `Main.java` wires `PahoMqttPublisher`, `BinanceMarketWorker`, `ApplicationManager`, and `ControlHttpServer`. `Main2.java` is a test-only dummy entry point and is excluded from this Docker work. `ConfigLoader` accepts an external YAML path through `--config`, while the bundled `application.yml` currently points MQTT to `tcp://localhost:1883` and HTTP to `127.0.0.1:8080`.
+The project is a single Gradle Java module using `build.gradle.kts`, Jackson YAML, Eclipse Paho, the JDK WebSocket client, and native `HttpServer`. `Main.java` wires `PahoMqttPublisher`, `BinanceMarketWorker`, `ApplicationManager`, and `ControlHttpServer`. `Main2.java` is a test-only dummy entry point and is excluded from this Docker work. `ConfigLoader` loads the bundled `src/main/resources/application.yml` or an optional external path and expands `${NAME:-default}` placeholders before YAML parsing. The current local and Docker YAML files duplicate the same settings but differ in MQTT broker and HTTP host defaults.
 
 `BinanceMarketWorker` keeps one reusable JDK `HttpClient`, reconnects generation-safely, publishes configured realtime/completed/logging topics, and does not require the broker to be available at startup. This behavior should remain unchanged; Dockerization supplies container-specific configuration and networking only.
 
@@ -39,7 +40,7 @@ The project is a single Gradle Java module using `build.gradle.kts`, Jackson YAM
 - Use a lightweight JRE runtime image after a Gradle builder stage; run the packaged application as a non-root user where practical.
 - Keep the broker external to Compose and make the complete MQTT URI overridable at deployment time, preferably through an environment-substituted Compose/config value such as `MQTT_BROKER`; do not add any broker service.
 - Document that Docker-to-Podman connectivity requires the Podman broker to publish port `1883` on a host-reachable interface, or requires the application to use the host’s fixed IP/DNS address; `host.docker.internal` is only a convenience route and is not a cross-runtime network bridge.
-- Mount the production YAML at runtime and invoke the generated `/app/bin/socket --config /config/application.yml` launcher, preserving the existing `ConfigLoader` contract.
+- Use one shared `src/main/resources/application.yml` for IntelliJ and Docker; remove the Docker-only YAML mount and rely on Compose environment variables for deployment-specific values.
 - Expose the application HTTP port; expose an MQTT port only when host-side access to the existing broker requires it, not as a broker container port.
 - Retain the worker’s asynchronous MQTT reconnect behavior because broker availability is external to the Compose lifecycle.
 
@@ -50,12 +51,13 @@ Add a Compose healthcheck that polls `GET /status` after the HTTP server is list
 
 Do not add Mosquitto configuration, broker volumes, broker health checks, or a second Compose stack. Document the required network reachability from the application container to the MQTT broker on the historical PC.
 
-Add concise deployment documentation covering build/start commands for `Main`, external MQTT host configuration, HTTP checks (`/status` and `/live-updates`), application logs, shutdown, and cleanup. Document environment-based broker selection with examples for a Podman broker published on the host and a fixed external IP/DNS endpoint. Add smoke validation that confirms the application starts, remains running, reaches the configured broker address, and exposes its HTTP API.
+Add concise deployment documentation covering build/start commands for `Main`, external MQTT host configuration, HTTP checks (`/status` and `/live-updates`), application logs, shutdown, and cleanup. Document environment-based broker and HTTP-host selection with examples for IntelliJ, Docker, a Podman broker published on the host, and a fixed external IP/DNS endpoint. Add smoke validation that confirms the application starts, remains running, reaches the configured broker address, and exposes its HTTP API.
 
 ### File Structure
 - Add `Dockerfile` for the shared multi-stage Java build/runtime image.
 - Add `docker-compose.yml` for `Main` only, without an MQTT broker service.
-- Add `docker/config/main/application.yml` with container-safe production overrides pointing to the external broker.
+- Update `src/main/resources/application.yml` with shared defaults and `${MQTT_BROKER:-...}` / `${HTTP_HOST:-...}` overrides.
+- Remove the redundant `docker/config/main/application.yml` and its Compose volume mount.
 - Add `docker-compose.md` documenting external broker prerequisites, commands, ports, and smoke checks.
 - Keep `src/main/java/nbgsmk/msr/Main.java` and `BinanceMarketWorker.java` behavior unchanged unless a small packaging-compatible adjustment is required; do not modify `Main2.java`.
 
@@ -142,3 +144,11 @@ The production Compose deployment can select a reachable external MQTT URI witho
 - Document Podman requirements: publish `1883`, bind the broker to a host-reachable interface, allow the Docker host/container source through firewall rules, and use the host’s fixed address when `host.docker.internal` does not route.
 - Add commands to verify DNS and TCP reachability from the application container and explain that `curl` may fail at the MQTT protocol layer after TCP succeeds.
 - Validate both a reachable external broker route and an unavailable route, confirming `/status` remains available and MQTT reconnect behavior remains non-fatal.
+
+### ✓ Stage 8: Consolidate IntelliJ and Docker configuration into one YAML
+Both local and container runs use `src/main/resources/application.yml`, while Compose supplies only environment-specific overrides.
+- Change the shared YAML broker value to `${MQTT_BROKER:-tcp://localhost:1883}` and HTTP host to `${HTTP_HOST:-127.0.0.1}`; retain common Binance, MQTT topic, port, state, reconnect, and logging settings.
+- Update `docker-compose.yml` to pass `MQTT_BROKER` and `HTTP_HOST=0.0.0.0`, and remove the `/config/application.yml` volume because the packaged resource is now authoritative.
+- Keep `ConfigLoader` environment expansion as the deployment mechanism and ensure Docker uses its configured broker endpoint through Compose environment defaults.
+- Remove the redundant `docker/config/main/application.yml` and update `docker-compose.md` to explain local defaults versus Compose overrides.
+- Validate IntelliJ startup with no environment variables, Docker startup with Compose overrides, `/status` reachability, and external MQTT routing.

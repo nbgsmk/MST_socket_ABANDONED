@@ -19,9 +19,9 @@ public final class ConfigLoader {
     public static AppConfig load(String externalPath) throws IOException {
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         try (InputStream input = externalPath == null || externalPath.isBlank()
-                ? ConfigLoader.class.getResourceAsStream("/application.yml")
+                ? ConfigLoader.class.getResourceAsStream("/application.yaml")
                 : Files.newInputStream(Path.of(externalPath))) {
-            if (input == null) throw new IOException("application.yml was not found");
+            if (input == null) throw new IOException("application.yaml was not found");
             String yaml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             return mapper.readValue(expandEnvironment(yaml), AppConfig.class);
         }

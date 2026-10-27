@@ -21,8 +21,9 @@ From the project root:
 docker compose -f docker-compose.yml up --build
 ```
 
-The application is exposed at `http://localhost:8080`. The mounted YAML binds
-HTTP to `0.0.0.0`. Set the broker endpoint before starting, without rebuilding:
+The application is exposed at `http://localhost:8080`. Compose overrides the
+shared YAML's local HTTP bind with `HTTP_HOST=0.0.0.0`. Set the broker endpoint
+before starting, without rebuilding:
 
 ```bash
 MQTT_BROKER=tcp://192.168.1.50:1883 docker compose -f docker-compose.yml up --build
@@ -30,6 +31,10 @@ MQTT_BROKER=tcp://192.168.1.50:1883 docker compose -f docker-compose.yml up --bu
 
 You can also use a DNS name, for example
 `MQTT_BROKER=tcp://mqtt.example.local:1883`.
+
+Both IntelliJ and Docker load `src/main/resources/application.yaml`. Without
+environment overrides, IntelliJ uses `localhost:1883` and `127.0.0.1`; Compose
+supplies the container-safe MQTT endpoint and HTTP bind host.
 
 ## Monitor and control
 

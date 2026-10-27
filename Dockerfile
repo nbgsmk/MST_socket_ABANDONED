@@ -15,8 +15,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/app appuser
 COPY --from=builder /build/build/install/socket/ ./
-RUN mkdir /config && chown appuser:appuser /config
-
 USER appuser
 EXPOSE 8080
-ENTRYPOINT ["/app/bin/socket", "--config", "/config/application.yml"]
+ENTRYPOINT ["/app/bin/socket"]

@@ -1,17 +1,18 @@
+# Shared defaults for IntelliJ and Docker. Compose may override these with environment variables.
 binance:
   baseUrl: "wss://fstream.binance.com/market/stream?streams="
   streams:
     - btcusdt@kline_1m
     - ethusdt@kline_1m
 mqtt:
-  broker: "tcp://localhost:1883"
+  broker: "${MQTT_BROKER:-tcp://localhost:1883}"
   clientId: "binance-market-worker"
   realtimeTopic: liveCandles
   completedTopic: closedCandles
   loggingTopic: logging
   publishRealtimeUpdates: true
 http:
-  host: "127.0.0.1"
+  host: "${HTTP_HOST:-127.0.0.1}" # Docker Compose overrides HTTP_HOST to 0.0.0.0, while IntelliJ uses 127.0.0.1
   port: 8080
 initialState: start
 reconnectDelaySeconds: 5
