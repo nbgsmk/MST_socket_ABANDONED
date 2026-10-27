@@ -5,62 +5,47 @@ sessionId: session-261026-223814-xnp0
 # Requirements
 
 ### Overview & Goals
-Visually indicate unsaved runtime-update changes by highlighting only the checkbox control that was changed until `Apply` succeeds.
+Reduce the remaining bottom whitespace beneath all dashboard panels while preserving the existing compact layout, controls, and runtime behavior.
 
 ### Scope
 **In scope**
-- Highlight only the changed `systemLog` or `mqtt` control.
-- Keep each control's highlight during polling and failed Apply requests.
-- Restore each control's normal appearance after successful Apply.
-- Preserve the existing runtime-only endpoint and checkbox behavior.
+- Reduce the shared vertical margin applied to `section` panels in `src/main/resources/dashboard.html`.
+- Preserve the current side-by-side top layout, responsive stacking, panel content, and JavaScript behavior.
 
 **Out of scope**
-- API, YAML, worker, persistence, endpoint, or server changes.
+- HTTP endpoints, server code, configuration, worker, MQTT, and runtime update behavior.
 
-### Functional Requirements
-- Changing `systemLog` immediately highlights only the `systemLog` control; changing `mqtt` does the same for `mqtt`.
-- Polling must not remove pending highlights or overwrite unsaved values.
-- Successful Apply clears both pending states and restores normal appearance.
-- Failed Apply keeps the selected values and highlights for the controls with pending changes.
 
 # Technical Design
 
 ### Current Implementation
-`src/main/resources/dashboard.html` contains the Runtime updates section around lines 30–34. A shared `updatesDirty` flag and section-level pending styling currently cover both controls; checkbox listeners are around lines 58–61, polling synchronization is in `refresh()`, and Apply clears the shared flag only after success.
-
-### Key Decisions
-- Wrap or target each checkbox as its own visual control and apply a pending class independently.
-- Track pending state per setting, while preserving independent protection from polling overwrites.
-- Remove each pending class only after a successful Apply; failed requests retain the relevant pending states.
+`src/main/resources/dashboard.html` uses one shared `section` CSS rule at line 12 for all panels. That rule currently applies `margin: .5rem 0`, leaving visible bottom spacing beneath the Controls, Runtime updates, and Status panels. The existing responsive layout and JavaScript behavior are already correct.
 
 ### Proposed Changes
-In `dashboard.html`, give the `systemLog` and `mqtt` controls individual highlight targets, replace the shared dirty flag with per-control pending state, and update polling so only controls without pending edits synchronize from the server. Apply both values through the existing endpoint, clearing pending styling only after success; no Java server changes are required.
+Reduce the vertical margin in the shared `section` rule to a smaller value, such as `.25rem 0`, so all panels have less bottom whitespace. Do not change panel structure, element IDs, pending highlighting, polling, or endpoint interactions.
 
 ### Risks
-Independent pending state must remain consistent when one checkbox is applied together with another unchanged checkbox; the endpoint still receives both values, while the UI clears both only after the request succeeds.
+The smaller margin must not cause panel content to overlap or make controls inaccessible at narrow viewport sizes.
 
 # Testing
 
 ### Validation Approach
-Build the project and manually verify the dashboard in a browser across polling intervals and Apply outcomes.
+Inspect the dashboard at desktop and narrow viewport sizes and confirm the reduced panel spacing does not cause overlap or affect existing interactions.
 
 ### Key Scenarios
-- Initial load shows both controls normally.
-- Changing only `systemLog` highlights only `systemLog`; changing only `mqtt` highlights only `mqtt`.
-- Each highlight survives multiple refresh intervals without overwriting its selection.
-- Successful Apply restores both controls' normal appearance.
-- Failed Apply retains the changed values and corresponding highlights.
+- All panels have visibly reduced bottom whitespace.
+- Controls and Runtime updates remain adjacent on wide screens.
+- Status remains below the top row and panels stack cleanly on narrow screens.
+- Lifecycle controls, polling, pending highlights, and Apply behavior remain functional.
 
 # Delivery Steps
 
-### ✓ Stage 1: Add independent checkbox pending states
-Only the runtime-update checkbox changed by the user receives the pending highlight.
-- Update `src/main/resources/dashboard.html` so each checkbox has an individual visual wrapper or target.
-- Replace the shared dirty styling with per-control pending flags and a helper that toggles each control's class.
-- Preserve per-control values during polling when that control has unsaved edits.
+### ✓ Stage 1: Reduce dashboard panel bottom spacing
+The dashboard panels use a smaller shared vertical margin.
+- Update the `section` rule in `src/main/resources/dashboard.html` from `.5rem 0` to a smaller margin such as `.25rem 0`.
+- Preserve panel padding, layout structure, element IDs, and all JavaScript behavior.
 
-### ✓ Stage 2: Synchronize independent states through Apply
-The dashboard clears pending highlights only after the existing runtime update request succeeds.
-- Continue submitting both checkbox values to `/live-updates`.
-- Clear both pending flags and styles after successful Apply; preserve them after failure.
-- Build and manually verify initial load, single-control edits, simultaneous edits, polling, and failed Apply scenarios.
+### ✓ Stage 2: Verify compact layout and existing interactions
+The dashboard is shorter without visual overlap or regressions.
+- Inspect Controls, Runtime updates, and Status panel spacing at desktop and narrow widths.
+- Confirm lifecycle buttons, checkbox synchronization, pending highlighting, polling, and Apply behavior remain unchanged.

@@ -5,33 +5,39 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Binance MQTT Worker</title>
   <style>
-    body { font: 16px system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f5f6f8; color: #20242a; }
-    section { background: white; padding: 1rem; margin: 1rem 0; border-radius: 8px; box-shadow: 0 1px 4px #ccd; }
+    body { font: 16px system-ui, sans-serif; max-width: 900px; margin: .5rem auto; padding: 0 .75rem; background: #f5f6f8; color: #20242a; }
+    h1 { margin: 0 0 .5rem; }
+    h2 { margin: 0 0 .5rem; font-size: 1.2rem; }
+    .top-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    section { background: white; padding: .75rem; margin: .25rem 0; border-radius: 8px; box-shadow: 0 1px 4px #ccd; }
     .update-control { display: inline-block; padding: .25rem; border-radius: 4px; }
     .update-control.pending { background: #fff3a3; }
-    button { margin: .25rem; padding: .5rem .8rem; cursor: pointer; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .5rem; }
-    dt { font-weight: 700; } dd { margin: 0 0 .5rem; }
-    #message { min-height: 1.4em; }
+    button { margin: .15rem; padding: .4rem .65rem; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .35rem; }
+    dt { font-weight: 700; } dd { margin: 0 0 .1rem; }
+    #message { min-height: 1em; }
+    @media (max-width: 600px) { .top-row { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <h1>Binance MQTT Worker</h1>
-  <section><h2>Controls</h2>
-    <button data-command="start">Start</button><button data-command="stop">Stop</button><button data-command="restart">Restart</button>
-    <p id="message" role="status"></p>
-  </section>
+  <div class="top-row">
+    <section><h2>Controls</h2>
+      <button data-command="start">Start</button><button data-command="stop">Stop</button><button data-command="restart">Restart</button>
+      <p id="message" role="status"></p>
+    </section>
+    <section id="runtimeUpdates"><h2>Runtime updates</h2>
+      <label class="update-control" id="systemLogControl"><input type="checkbox" id="systemLog"> System log</label>
+      <label class="update-control" id="mqttControl"><input type="checkbox" id="mqtt"> MQTT</label>
+      <button id="saveUpdates">Apply</button>
+    </section>
+  </div>
   <section><h2>Status</h2><dl class="grid">
     <div><dt>Desired state</dt><dd id="desiredState">—</dd></div><div><dt>Worker</dt><dd id="workerState">—</dd></div>
     <div><dt>Socket</dt><dd id="socketState">—</dd></div><div><dt>MQTT</dt><dd id="mqttConnected">—</dd></div>
     <div><dt>Uptime</dt><dd id="uptimeSeconds">—</dd></div><div><dt>Streams</dt><dd id="streams">—</dd></div>
     <div><dt>Last error</dt><dd id="lastError">—</dd></div><div><dt>MQTT error</dt><dd id="mqttError">—</dd></div>
   </dl></section>
-  <section id="runtimeUpdates"><h2>Runtime updates</h2>
-    <label class="update-control" id="systemLogControl"><input type="checkbox" id="systemLog"> System log</label>
-    <label class="update-control" id="mqttControl"><input type="checkbox" id="mqtt"> MQTT</label>
-    <button id="saveUpdates">Apply</button>
-  </section>
   <script>
     const $ = id => document.getElementById(id);
     const pendingUpdates = {systemLog: false, mqtt: false};
