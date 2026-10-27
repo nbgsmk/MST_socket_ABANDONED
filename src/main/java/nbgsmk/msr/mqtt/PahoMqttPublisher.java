@@ -3,6 +3,7 @@ package nbgsmk.msr.mqtt;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
@@ -19,7 +20,7 @@ public final class PahoMqttPublisher implements MqttPublisher {
     private volatile boolean closed;
 
     public PahoMqttPublisher(String broker, String clientId) throws Exception {
-        client = new MqttClient(broker, clientId);
+        client = new MqttClient(broker, clientId, new MemoryPersistence());
         options = new MqttConnectOptions();
         options.setAutomaticReconnect(true);
         options.setCleanSession(true);

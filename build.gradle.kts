@@ -1,9 +1,14 @@
 plugins {
 	id("java")
+	id("application")
 }
 
 group = "nbgsmk.msr"
 version = "1.0-SNAPSHOT"
+
+application {
+	mainClass.set("nbgsmk.msr.Main")
+}
 
 repositories {
 	mavenCentral()
