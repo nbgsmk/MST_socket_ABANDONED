@@ -21,7 +21,7 @@ public final class Main {
         LiveCandleSettings settings = new LiveCandleSettings(config);
         PahoMqttPublisher publisher = new PahoMqttPublisher(config.mqtt().broker(), config.mqtt().clientId());
         BinanceMarketWorker worker = new BinanceMarketWorker(config, publisher, settings);
-        ApplicationManager manager = new ApplicationManager(config, worker, settings);
+        ApplicationManager manager = new ApplicationManager(config, worker, settings, publisher);
         ControlHttpServer http = new ControlHttpServer(config.http().host(), config.http().port(), manager);
         CountDownLatch keepAlive = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

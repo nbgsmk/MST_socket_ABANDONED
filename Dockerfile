@@ -10,7 +10,10 @@ RUN chmod +x gradlew && ./gradlew installDist --no-daemon
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
-RUN useradd --system --create-home --home-dir /home/app appuser
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --home-dir /home/app appuser
 COPY --from=builder /build/build/install/socket/ ./
 RUN mkdir /config && chown appuser:appuser /config
 

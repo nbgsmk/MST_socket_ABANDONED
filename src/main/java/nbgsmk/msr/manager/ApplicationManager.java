@@ -1,6 +1,7 @@
 package nbgsmk.msr.manager;
 
 import nbgsmk.msr.config.AppConfig;
+import nbgsmk.msr.mqtt.MqttPublisher;
 import nbgsmk.msr.worker.Worker;
 
 import java.time.Duration;
@@ -12,18 +13,24 @@ public final class ApplicationManager implements AutoCloseable {
     private final AppConfig config;
     private final ReentrantLock lifecycle = new ReentrantLock();
     private final LiveCandleSettings liveCandleSettings;
+    private final MqttPublisher publisher;
     private final Instant startedAt = Instant.now();
     private volatile String desiredState;
     private volatile Throwable lastError;
 
     public ApplicationManager(AppConfig config, Worker worker) {
-        this(config, worker, new LiveCandleSettings(config));
+        this(config, worker, new LiveCandleSettings(config), null);
     }
 
     public ApplicationManager(AppConfig config, Worker worker, LiveCandleSettings liveCandleSettings) {
+        this(config, worker, liveCandleSettings, null);
+    }
+
+    public ApplicationManager(AppConfig config, Worker worker, LiveCandleSettings liveCandleSettings, MqttPublisher publisher) {
         this.config = config;
         this.worker = worker;
         this.liveCandleSettings = liveCandleSettings;
+        this.publisher = publisher;
         this.desiredState = config.initialState().toLowerCase();
     }
 
@@ -42,7 +49,9 @@ public final class ApplicationManager implements AutoCloseable {
     public ManagerStatus status() {
         Throwable error = worker.lastError() != null ? worker.lastError() : lastError;
         return new ManagerStatus(desiredState, worker.status(), worker.socketState(), uptime(),
-                config.binance().streams(), error == null ? null : error.getMessage());
+                config.binance().streams(), error == null ? null : error.getMessage(),
+                publisher != null && publisher.isConnected(),
+                publisher == null || publisher.lastError() == null ? null : publisher.lastError().getMessage());
     }
 
     public Duration uptime() { return Duration.between(startedAt, Instant.now()); }

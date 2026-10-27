@@ -6,6 +6,12 @@ services:
     restart: on-failure
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/status"]
+      start_period: 10s
+      interval: 10s
+      timeout: 3s
+      retries: 5
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

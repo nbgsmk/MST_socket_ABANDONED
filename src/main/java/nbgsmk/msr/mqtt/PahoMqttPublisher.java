@@ -24,7 +24,9 @@ public final class PahoMqttPublisher implements MqttPublisher {
         options = new MqttConnectOptions();
         options.setAutomaticReconnect(true);
         options.setCleanSession(true);
-        connect();
+        options.setConnectionTimeout(5);
+        System.out.println("MQTT publisher created for " + broker + "; attempting connection");
+        reconnect.execute(this::connect);
     }
 
     private synchronized void connect() {
@@ -50,7 +52,7 @@ public final class PahoMqttPublisher implements MqttPublisher {
     @Override public void publish(String topic, String payload) {
         if (closed) return;
         if (!client.isConnected()) {
-            connect();
+            scheduleReconnect();
             return;
         }
         try {
@@ -69,8 +71,8 @@ public final class PahoMqttPublisher implements MqttPublisher {
         catch (Exception ignored) { }
     }
 
-    public boolean isConnected() { return client.isConnected(); }
-    public Throwable lastError() { return lastError; }
+    @Override public boolean isConnected() { return client.isConnected(); }
+    @Override public Throwable lastError() { return lastError; }
 
     private static String safeMessage(Throwable error) {
         String message = error == null ? null : error.getMessage();

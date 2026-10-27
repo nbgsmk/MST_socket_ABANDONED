@@ -34,7 +34,8 @@ public final class ControlHttpServer implements AutoCloseable {
         String json = "{\"desiredState\":" + quote(s.desiredState()) + ",\"workerState\":" + quote(s.workerState().name()) +
                 ",\"socketState\":" + quote(s.socketState()) + ",\"uptimeSeconds\":" + s.uptime().toSeconds() +
                 ",\"streams\":[" + s.streams().stream().map(ControlHttpServer::quote).reduce((a,b) -> a + "," + b).orElse("") +
-                "],\"lastError\":" + error + "}";
+                "],\"lastError\":" + error + ",\"mqttConnected\":" + s.mqttConnected() +
+                ",\"mqttError\":" + (s.mqttError() == null ? "null" : quote(s.mqttError())) + "}";
         send(exchange, 200, json);
     }
 

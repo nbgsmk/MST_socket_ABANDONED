@@ -6,4 +6,5 @@ import java.time.Duration;
 import java.util.List;
 
 public record ManagerStatus(String desiredState, WorkerStatus workerState, String socketState,
-                            Duration uptime, List<String> streams, String lastError) {}
+                            Duration uptime, List<String> streams, String lastError,
+                            boolean mqttConnected, String mqttError) {}
