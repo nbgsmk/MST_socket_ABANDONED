@@ -210,3 +210,20 @@ The YAML values remain permanent startup configuration, while `/live-candles` ch
 - Ensure `LiveCandleSettings` is the only mutable runtime state used by the worker and HTTP endpoint; do not serialize or persist endpoint updates.
 - Clarify `/live-candles` responses and documentation as runtime overrides, with a process restart reloading the YAML values.
 - Add tests that update both flags through HTTP, verify the running worker uses the overrides, and verify the YAML resource/configuration remains unchanged and defaults are restored by a fresh configuration load.
+
+### ✓ Step 14: Restore Binance startup wiring and make output configuration worker-agnostic
+`Main.java` runs the original Binance MQTT worker again, while YAML and Java configuration names describe generic message streams and runtime output rather than candle-specific concepts.
+- Restore `Main.java` imports and construction for `PahoMqttPublisher` and `BinanceMarketWorker`; retain the shared `LiveCandleSettings`, HTTP server, shutdown hook, initial-state application, and keep-alive behavior.
+- Replace the current candle-specific MQTT names with a worker-agnostic naming set. Recommended option: `mqtt.liveTopic` → `mqtt.realtimeTopic`, `mqtt.candlesTopic` → `mqtt.completedTopic`, and `mqtt.publishLiveCandles` → `mqtt.publishRealtimeUpdates`; retain `mqtt.loggingTopic` because it already describes a generic diagnostic channel.
+- Replace `systemLog.liveCandles` with `systemLog.realtimeUpdates`, matching the recommended runtime/output terminology.
+- Preserve the existing topic routing semantics: non-final worker updates use the realtime topic, final/completed updates use the completed topic, and completed updates remain always published and logged.
+- Also document these alternatives for review before implementation: `dataTopic`/`completedDataTopic` with `publishLiveUpdates`, or `updatesTopic`/`completedUpdatesTopic` with `publishUpdates`; choose one consistent vocabulary rather than mixing names.
+- Update `AppConfig`, `ConfigLoader` binding expectations, `LiveCandleSettings`, `BinanceMarketWorker`, tests, and `application.yml` together; do not support both old and new keys unless backward compatibility is explicitly requested.
+- Add regression coverage proving `Main` selects `BinanceMarketWorker`, renamed YAML defaults load correctly, runtime `/live-candles` behavior remains equivalent under the renamed settings, and closed updates remain unaffected.
+
+### Step 15: Add a separate DummyWorker application entry point
+`Main2.java` provides a simple runnable example that uses the existing generic manager and `DummyWorker`, while the production `Main.java` remains unchanged.
+- Copy the current `Main.java` bootstrap structure into `src/main/java/nbgsmk/msr/Main2.java` with class and constructor names changed appropriately.
+- Replace only the production worker wiring in `Main2` with `nbgsmk.msr.example.DummyWorker`; retain configuration loading, shared runtime settings, HTTP controls, initial-state handling, keep-alive behavior, and shutdown cleanup.
+- Do not modify `src/main/java/nbgsmk/msr/Main.java` or its Binance/MQTT wiring.
+- Verify that `Main2` can start with the configured initial state, prints the dummy worker’s periodic simulated work, responds to the existing HTTP lifecycle endpoints, and stops cleanly through shutdown handling.

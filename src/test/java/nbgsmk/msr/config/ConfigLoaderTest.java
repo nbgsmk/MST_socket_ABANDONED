@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigLoaderTest {
-    @Test void loadsNestedLivePublicationSetting() throws Exception {
+    @Test void loadsNestedRealtimePublicationSetting() throws Exception {
         AppConfig config = ConfigLoader.load(null);
-        assertTrue(config.mqtt().publishLiveCandles());
-        assertTrue(config.systemLog().liveCandles());
+        assertTrue(config.mqtt().publishRealtimeUpdates());
+        assertTrue(config.systemLog().realtimeUpdates());
     }
     @Test void loadsDefaults() throws Exception {
         AppConfig config = ConfigLoader.load(null);

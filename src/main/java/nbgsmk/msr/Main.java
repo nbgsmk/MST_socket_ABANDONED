@@ -18,8 +18,8 @@ public final class Main {
         System.out.println("Loading configuration" + (configPath == null ? " from classpath" : " from " + configPath));
         AppConfig config = ConfigLoader.load(configPath);
         System.out.println("Configuration loaded; initial state=" + config.initialState());
-        PahoMqttPublisher publisher = new PahoMqttPublisher(config.mqtt().broker(), config.mqtt().clientId());
         LiveCandleSettings settings = new LiveCandleSettings(config);
+        PahoMqttPublisher publisher = new PahoMqttPublisher(config.mqtt().broker(), config.mqtt().clientId());
         BinanceMarketWorker worker = new BinanceMarketWorker(config, publisher, settings);
         ApplicationManager manager = new ApplicationManager(config, worker, settings);
         ControlHttpServer http = new ControlHttpServer(config.http().host(), config.http().port(), manager);

@@ -21,7 +21,7 @@ public record AppConfig(
         if (mqtt == null || mqtt.broker() == null || mqtt.broker().isBlank()) {
             throw new IllegalArgumentException("mqtt.broker must not be blank");
         }
-        if (mqtt.liveTopic().isBlank() || mqtt.candlesTopic().isBlank() || mqtt.loggingTopic().isBlank()) {
+        if (mqtt.realtimeTopic().isBlank() || mqtt.completedTopic().isBlank() || mqtt.loggingTopic().isBlank()) {
             throw new IllegalArgumentException("mqtt topics must not be blank");
         }
         if (http == null || http.port() < 1 || http.port() > 65535) {
@@ -41,20 +41,20 @@ public record AppConfig(
     }
 
     public record BinanceConfig(String baseUrl, List<String> streams) {}
-    public record MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic,
-                             String loggingTopic, Boolean publishLiveCandles) {
+    public record MqttConfig(String broker, String clientId, String realtimeTopic, String completedTopic,
+                             String loggingTopic, Boolean publishRealtimeUpdates) {
         public MqttConfig {
-            if (publishLiveCandles == null) publishLiveCandles = true;
+            if (publishRealtimeUpdates == null) publishRealtimeUpdates = true;
         }
 
-        public MqttConfig(String broker, String clientId, String liveTopic, String candlesTopic, String loggingTopic) {
-            this(broker, clientId, liveTopic, candlesTopic, loggingTopic, true);
+        public MqttConfig(String broker, String clientId, String realtimeTopic, String completedTopic, String loggingTopic) {
+            this(broker, clientId, realtimeTopic, completedTopic, loggingTopic, true);
         }
     }
     public record HttpConfig(String host, int port) {}
-    public record SystemLogConfig(Boolean liveCandles) {
+    public record SystemLogConfig(Boolean realtimeUpdates) {
         public SystemLogConfig {
-            if (liveCandles == null) liveCandles = true;
+            if (realtimeUpdates == null) realtimeUpdates = true;
         }
     }
 }

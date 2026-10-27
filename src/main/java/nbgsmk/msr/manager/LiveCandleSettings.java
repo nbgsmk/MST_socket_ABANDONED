@@ -7,8 +7,8 @@ public final class LiveCandleSettings {
     private volatile boolean mqtt;
 
     public LiveCandleSettings(AppConfig config) {
-        systemLog = config.systemLog().liveCandles();
-        mqtt = config.mqtt().publishLiveCandles();
+        systemLog = config.systemLog().realtimeUpdates();
+        mqtt = config.mqtt().publishRealtimeUpdates();
     }
 
     public boolean systemLog() { return systemLog; }

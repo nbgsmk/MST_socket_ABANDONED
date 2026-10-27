@@ -121,7 +121,7 @@ public final class BinanceMarketWorker implements Worker {
                     ",\"low\":" + quote(k.path("l").asText()) + ",\"close\":" + quote(k.path("c").asText()) +
                     ",\"volume\":" + quote(k.path("v").asText()) + ",\"closed\":" + closed + "}";
             if (closed || liveCandleSettings.mqtt()) {
-                publisher.publish(closed ? config.mqtt().candlesTopic() : config.mqtt().liveTopic(), payload);
+                publisher.publish(closed ? config.mqtt().completedTopic() : config.mqtt().realtimeTopic(), payload);
             }
             if (closed || liveCandleSettings.systemLog()) {
                 System.out.println((closed ? "CLOSED " : "LIVE ") + message);

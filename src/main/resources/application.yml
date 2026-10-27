@@ -6,14 +6,14 @@ binance:
 mqtt:
   broker: "tcp://localhost:1883"
   clientId: "binance-market-worker"
-  liveTopic: live
-  candlesTopic: candles
+  realtimeTopic: liveCandles
+  completedTopic: closedCandles
   loggingTopic: logging
-  publishLiveCandles: true
+  publishRealtimeUpdates: true
 http:
   host: "127.0.0.1"
   port: 8080
 initialState: start
 reconnectDelaySeconds: 5
 systemLog:
-  liveCandles: true
+  realtimeUpdates: true
