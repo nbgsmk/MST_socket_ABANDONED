@@ -227,3 +227,30 @@ The YAML values remain permanent startup configuration, while `/live-candles` ch
 - Replace only the production worker wiring in `Main2` with `nbgsmk.msr.example.DummyWorker`; retain configuration loading, shared runtime settings, HTTP controls, initial-state handling, keep-alive behavior, and shutdown cleanup.
 - Do not modify `src/main/java/nbgsmk/msr/Main.java` or its Binance/MQTT wiring.
 - Verify that `Main2` can start with the configured initial state, prints the dummy worker’s periodic simulated work, responds to the existing HTTP lifecycle endpoints, and stops cleanly through shutdown handling.
+
+### ✓ Step 16: Plug the MQTT publisher into the DummyWorker example
+`Main2.java` mirrors `Main.java`'s bootstrap and service wiring, replacing only `BinanceMarketWorker` with `DummyWorker` while still creating and managing the configured `PahoMqttPublisher`.
+- Import `PahoMqttPublisher` in `Main2.java` and construct it from `config.mqtt().broker()` and `config.mqtt().clientId()` before creating the manager.
+- Keep `DummyWorker` as the worker implementation and preserve the existing manager, HTTP controls, initial-state, keep-alive, and runtime-settings behavior.
+- Close the publisher from the shutdown hook, alongside the HTTP server, manager, and dummy worker, so its reconnect executor and Paho client do not remain alive.
+- Verify that `Main2` remains running when the MQTT broker is unavailable, continues printing dummy work, and performs publisher cleanup on shutdown.
+
+### ✓ Step 17: Publish dummy messages from DummyWorker to configured MQTT topics
+`Main2`'s dummy worker will exercise the configured MQTT integration by publishing deterministic sample payloads to all three configured topics on each five-second work cycle, without changing production Binance behavior.
+- Update `src/main/java/nbgsmk/msr/example/DummyWorker.java` to accept an injected `MqttPublisher` and the configured `AppConfig.MqttConfig` (or equivalent topic values), while retaining the existing `Worker` lifecycle contract.
+- In `doWork()`, publish a small JSON dummy payload to `realtimeTopic`, `completedTopic`, and `loggingTopic`; keep the console work message and handle publish/runtime failures through the worker’s existing error reporting.
+- Update `src/main/java/nbgsmk/msr/Main2.java` to construct the worker with the already-created `PahoMqttPublisher` and MQTT configuration; keep `Main.java` and `BinanceMarketWorker.java` unchanged.
+- Add focused tests using a fake `MqttPublisher` to verify all three configured topics receive messages, scheduled work remains lifecycle-controlled, and publisher failures do not terminate the application.
+
+### Testing for Step 17
+- Verify the dummy worker publishes once per scheduled cycle to `realtimeTopic`, `completedTopic`, and `loggingTopic` with non-empty deterministic JSON payloads.
+- Verify `stop()` prevents subsequent dummy publications and `close()` releases the worker scheduler; verify repeated lifecycle calls remain safe.
+- Verify `Main2` uses the YAML values `liveCandles`, `closedCandles`, and `logging` through `AppConfig`, while `Main` remains wired to Binance.
+
+### ✓ Step 18: Rename the runtime live-update control endpoint
+The browser-facing runtime settings endpoint is renamed from `/live-candles` to the worker-agnostic `/live-updates`, while its query controls and runtime-only behavior remain unchanged.
+- Update `ControlHttpServer` to register `/live-updates` and route it to the existing live-update settings handler.
+- Keep `GET` and `POST` support, `systemLog` and `mqtt` query parameters, JSON response fields, validation behavior, and closed-update semantics unchanged.
+- Replace candle-specific invalid-parameter wording with `/live-updates`-appropriate wording.
+- Update `ControlHttpServerTest` to use `/live-updates` for status, updates, invalid parameter, and boolean validation requests.
+- Do not retain `/live-candles` as an alias unless backward compatibility is requested; update endpoint documentation/comments in the plan to use `/live-updates`.

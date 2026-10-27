@@ -21,7 +21,7 @@ public final class ControlHttpServer implements AutoCloseable {
         server.createContext("/start", exchange -> command(exchange, "start"));
         server.createContext("/stop", exchange -> command(exchange, "stop"));
         server.createContext("/restart", exchange -> command(exchange, "restart"));
-        server.createContext("/live-candles", this::liveCandles);
+        server.createContext("/live-updates", this::liveUpdates);
         server.setExecutor(Executors.newCachedThreadPool());
     }
 
@@ -47,7 +47,7 @@ public final class ControlHttpServer implements AutoCloseable {
         catch (RuntimeException e) { send(exchange, 500, "{\"error\":" + quote(e.getMessage()) + "}"); }
     }
 
-    private void liveCandles(HttpExchange exchange) throws IOException {
+    private void liveUpdates(HttpExchange exchange) throws IOException {
         if (!allowedMethod(exchange)) { send(exchange, 405, "{\"error\":\"method not allowed\"}"); return; }
         try {
             Boolean systemLog = null;
@@ -57,7 +57,7 @@ public final class ControlHttpServer implements AutoCloseable {
                 for (String pair : query.split("&")) {
                     String[] part = pair.split("=", 2);
                     if (part.length != 2 || !("systemLog".equals(part[0]) || "mqtt".equals(part[0]))) {
-                        send(exchange, 400, "{\"error\":\"invalid live-candles parameter\"}"); return;
+                        send(exchange, 400, "{\"error\":\"invalid live-updates parameter\"}"); return;
                     }
                     boolean value;
                     if ("true".equalsIgnoreCase(part[1])) value = true;

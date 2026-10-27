@@ -25,19 +25,21 @@ class ControlHttpServerTest {
                 assertEquals(200, request(port, path, "GET"));
                 assertEquals(200, request(port, path, "POST"));
             }
-            assertEquals(200, request(port, "/live-candles", "GET"));
-            assertEquals(200, request(port, "/live-candles?systemLog=false&mqtt=true", "POST"));
+            assertEquals(200, request(port, "/live-updates", "GET"));
+            assertEquals(200, request(port, "/live-updates?systemLog=false&mqtt=true", "POST"));
             assertEquals(false, manager.liveCandleSettings().systemLog());
             assertEquals(true, manager.liveCandleSettings().mqtt());
-            assertEquals(400, request(port, "/live-candles?systemLog=maybe", "GET"));
-            assertEquals(400, request(port, "/live-candles?unknown=true", "GET"));
+            assertEquals(400, request(port, "/live-updates?systemLog=maybe", "GET"));
+            assertEquals(400, request(port, "/live-updates?unknown=true", "GET"));
             assertEquals(405, request(port, "/status", "PUT"));
             assertEquals(405, request(port, "/start", "DELETE"));
         }
     }
 
     private static int request(int port, String path, String method) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(new URI("http", null, "127.0.0.1", port, path, null, null).toString()).openConnection();
+        HttpURLConnection connection = (HttpURLConnection) new URI("http", null, "127.0.0.1", port,
+                path.contains("?") ? path.substring(0, path.indexOf('?')) : path,
+                path.contains("?") ? path.substring(path.indexOf('?') + 1) : null, null).toURL().openConnection();
         connection.setRequestMethod(method);
         return connection.getResponseCode();
     }

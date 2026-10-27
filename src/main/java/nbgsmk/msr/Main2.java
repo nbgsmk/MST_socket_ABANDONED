@@ -6,6 +6,7 @@ import nbgsmk.msr.example.DummyWorker;
 import nbgsmk.msr.http.ControlHttpServer;
 import nbgsmk.msr.manager.ApplicationManager;
 import nbgsmk.msr.manager.LiveCandleSettings;
+import nbgsmk.msr.mqtt.PahoMqttPublisher;
 
 import java.util.concurrent.CountDownLatch;
 
@@ -18,7 +19,8 @@ public final class Main2 {
         AppConfig config = ConfigLoader.load(configPath);
         System.out.println("Configuration loaded; initial state=" + config.initialState());
         LiveCandleSettings settings = new LiveCandleSettings(config);
-        DummyWorker worker = new DummyWorker();
+        PahoMqttPublisher publisher = new PahoMqttPublisher(config.mqtt().broker(), config.mqtt().clientId());
+        DummyWorker worker = new DummyWorker(publisher, config.mqtt());
         ApplicationManager manager = new ApplicationManager(config, worker, settings);
         ControlHttpServer http = new ControlHttpServer(config.http().host(), config.http().port(), manager);
         CountDownLatch keepAlive = new CountDownLatch(1);
@@ -27,6 +29,7 @@ public final class Main2 {
             http.close();
             manager.close();
             worker.close();
+            publisher.close();
             System.out.println("Shutdown cleanup complete");
         }, "shutdown-cleanup"));
         http.start();
