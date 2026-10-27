@@ -22,6 +22,7 @@ public final class BinanceMarketWorker implements Worker {
     private final MqttPublisher publisher;
     private final LiveCandleSettings liveCandleSettings;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService reconnect = Executors.newSingleThreadScheduledExecutor();
     private volatile WorkerStatus status = WorkerStatus.STOPPED;
@@ -52,7 +53,7 @@ public final class BinanceMarketWorker implements Worker {
     private void connect(long currentGeneration) {
         if (!isCurrent(currentGeneration)) return;
         try {
-            WebSocket connected = HttpClient.newHttpClient().newWebSocketBuilder()
+            WebSocket connected = httpClient.newWebSocketBuilder()
                     .buildAsync(URI.create(streamUrl()), new Listener(currentGeneration)).join();
             synchronized (this) {
                 if (!isCurrent(currentGeneration)) {
