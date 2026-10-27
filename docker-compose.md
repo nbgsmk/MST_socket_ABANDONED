@@ -8,9 +8,9 @@ historical PC.
 
 - Docker Engine with the Compose plugin.
 - The historical-PC MQTT broker listening on TCP port `1883`.
-- The broker must accept connections from the Docker host. If it runs on a
-  different machine, replace `host.docker.internal` in
-  `docker/config/main/application.yml` with that machine's reachable address.
+- The broker must accept connections from the Docker host. The broker URI is
+  selected with `MQTT_BROKER`; the default is
+  `tcp://host.docker.internal:1883`.
 - The broker firewall and bind address must allow the connection.
 
 ## Start
@@ -22,7 +22,14 @@ docker compose -f docker-compose.yml up --build
 ```
 
 The application is exposed at `http://localhost:8080`. The mounted YAML binds
-HTTP to `0.0.0.0` and connects MQTT to `tcp://host.docker.internal:1883`.
+HTTP to `0.0.0.0`. Set the broker endpoint before starting, without rebuilding:
+
+```bash
+MQTT_BROKER=tcp://192.168.1.50:1883 docker compose -f docker-compose.yml up --build
+```
+
+You can also use a DNS name, for example
+`MQTT_BROKER=tcp://mqtt.example.local:1883`.
 
 ## Monitor and control
 
@@ -78,9 +85,17 @@ curl -s http://localhost:8080/status
 docker compose -f docker-compose.yml logs --tail=100 main
 ```
 
-For a broker in another container on the Docker host, publish that broker's
-port to the host (for example `1883:1883`) and keep
-`host.docker.internal:1883`. Verify the route from the application container:
+For a broker running in Podman, publish its port on a host-reachable interface
+(for example `-p 1883:1883`) and ensure the broker listens beyond loopback.
+Docker and Podman normally have separate networks; `host.docker.internal` is
+not a cross-runtime network bridge. If that route times out, use the host's
+fixed LAN IP or DNS name instead:
+
+```bash
+MQTT_BROKER=tcp://192.168.1.50:1883 docker compose -f docker-compose.yml up -d
+```
+
+Verify the selected route from the application container:
 
 ```bash
 docker compose -f docker-compose.yml exec main getent hosts host.docker.internal
@@ -88,8 +103,9 @@ docker compose -f docker-compose.yml exec main curl -v --connect-timeout 3 http:
 ```
 
 The HTTP request is expected to fail at the protocol layer; successful TCP
-connection is the relevant result. If the broker container is not published
-to the host, attach the application to its Docker network and use the broker
-container's network name instead. Temporarily stopping the external broker
-should not stop the application container; restoring it should allow Paho
-reconnect behavior to recover.
+connection is the relevant result. Replace the hostname in that command with
+the configured broker host when using a fixed IP or DNS name. A timeout means
+to check Podman port publishing, broker bind address, host firewall rules, and
+that the address is reachable from the Docker host. Temporarily stopping the
+external broker should not stop the application container; restoring it should
+allow Paho reconnect behavior to recover.

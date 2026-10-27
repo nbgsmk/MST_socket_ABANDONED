@@ -14,5 +14,7 @@ services:
       retries: 5
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    environment:
+      MQTT_BROKER: "${MQTT_BROKER:-tcp://host.docker.internal:1883}"
     volumes:
       - ./docker/config/main/application.yml:/config/application.yml:ro
