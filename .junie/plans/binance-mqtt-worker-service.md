@@ -221,7 +221,7 @@ The YAML values remain permanent startup configuration, while `/live-candles` ch
 - Update `AppConfig`, `ConfigLoader` binding expectations, `LiveCandleSettings`, `BinanceMarketWorker`, tests, and `application.yml` together; do not support both old and new keys unless backward compatibility is explicitly requested.
 - Add regression coverage proving `Main` selects `BinanceMarketWorker`, renamed YAML defaults load correctly, runtime `/live-candles` behavior remains equivalent under the renamed settings, and closed updates remain unaffected.
 
-### Step 15: Add a separate DummyWorker application entry point
+### ✓ Step 15: Add a separate DummyWorker application entry point
 `Main2.java` provides a simple runnable example that uses the existing generic manager and `DummyWorker`, while the production `Main.java` remains unchanged.
 - Copy the current `Main.java` bootstrap structure into `src/main/java/nbgsmk/msr/Main2.java` with class and constructor names changed appropriately.
 - Replace only the production worker wiring in `Main2` with `nbgsmk.msr.example.DummyWorker`; retain configuration loading, shared runtime settings, HTTP controls, initial-state handling, keep-alive behavior, and shutdown cleanup.
