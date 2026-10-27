@@ -6,6 +6,7 @@ import nbgsmk.msr.manager.ApplicationManager;
 import nbgsmk.msr.manager.ManagerStatus;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executors;
@@ -22,6 +23,7 @@ public final class ControlHttpServer implements AutoCloseable {
         server.createContext("/stop", exchange -> command(exchange, "stop"));
         server.createContext("/restart", exchange -> command(exchange, "restart"));
         server.createContext("/live-updates", this::liveUpdates);
+        server.createContext("/", this::dashboard);
         server.setExecutor(Executors.newCachedThreadPool());
     }
 
@@ -37,6 +39,20 @@ public final class ControlHttpServer implements AutoCloseable {
                 "],\"lastError\":" + error + ",\"mqttConnected\":" + s.mqttConnected() +
                 ",\"mqttError\":" + (s.mqttError() == null ? "null" : quote(s.mqttError())) + "}";
         send(exchange, 200, json);
+    }
+
+    private void dashboard(HttpExchange exchange) throws IOException {
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            send(exchange, 405, "Method Not Allowed", "text/plain; charset=utf-8");
+            return;
+        }
+        try (InputStream input = ControlHttpServer.class.getResourceAsStream("/dashboard.html")) {
+            if (input == null) {
+                send(exchange, 500, "Dashboard resource is unavailable", "text/plain; charset=utf-8");
+                return;
+            }
+            send(exchange, 200, new String(input.readAllBytes(), StandardCharsets.UTF_8), "text/html; charset=utf-8");
+        }
     }
 
     private void command(HttpExchange exchange, String command) throws IOException {
@@ -74,8 +90,12 @@ public final class ControlHttpServer implements AutoCloseable {
     }
 
     private static void send(HttpExchange exchange, int status, String body) throws IOException {
+        send(exchange, status, body, "application/json; charset=utf-8");
+    }
+
+    private static void send(HttpExchange exchange, int status, String body, String contentType) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.sendResponseHeaders(status, bytes.length);
         try (var output = exchange.getResponseBody()) { output.write(bytes); }
     }

@@ -32,6 +32,11 @@ MQTT_BROKER=tcp://192.168.1.50:1883 docker compose -f docker-compose.yml up --bu
 You can also use a DNS name, for example
 `MQTT_BROKER=tcp://mqtt.example.local:1883`.
 
+Open `http://localhost:8080/` in a browser for the dashboard. It displays worker,
+socket, uptime, stream, error, and MQTT status, and provides start, stop,
+restart, and runtime update controls. The existing JSON endpoints remain
+available for scripts and health checks.
+
 Both IntelliJ and Docker load `src/main/resources/application.yaml`. Without
 environment overrides, IntelliJ uses `localhost:1883` and `127.0.0.1`; Compose
 supplies the container-safe MQTT endpoint and HTTP bind host.

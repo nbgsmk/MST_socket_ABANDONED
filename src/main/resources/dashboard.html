@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Binance MQTT Worker</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f5f6f8; color: #20242a; }
+    section { background: white; padding: 1rem; margin: 1rem 0; border-radius: 8px; box-shadow: 0 1px 4px #ccd; }
+    .update-control { display: inline-block; padding: .25rem; border-radius: 4px; }
+    .update-control.pending { background: #fff3a3; }
+    button { margin: .25rem; padding: .5rem .8rem; cursor: pointer; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .5rem; }
+    dt { font-weight: 700; } dd { margin: 0 0 .5rem; }
+    #message { min-height: 1.4em; }
+  </style>
+</head>
+<body>
+  <h1>Binance MQTT Worker</h1>
+  <section><h2>Controls</h2>
+    <button data-command="start">Start</button><button data-command="stop">Stop</button><button data-command="restart">Restart</button>
+    <p id="message" role="status"></p>
+  </section>
+  <section><h2>Status</h2><dl class="grid">
+    <div><dt>Desired state</dt><dd id="desiredState">—</dd></div><div><dt>Worker</dt><dd id="workerState">—</dd></div>
+    <div><dt>Socket</dt><dd id="socketState">—</dd></div><div><dt>MQTT</dt><dd id="mqttConnected">—</dd></div>
+    <div><dt>Uptime</dt><dd id="uptimeSeconds">—</dd></div><div><dt>Streams</dt><dd id="streams">—</dd></div>
+    <div><dt>Last error</dt><dd id="lastError">—</dd></div><div><dt>MQTT error</dt><dd id="mqttError">—</dd></div>
+  </dl></section>
+  <section id="runtimeUpdates"><h2>Runtime updates</h2>
+    <label class="update-control" id="systemLogControl"><input type="checkbox" id="systemLog"> System log</label>
+    <label class="update-control" id="mqttControl"><input type="checkbox" id="mqtt"> MQTT</label>
+    <button id="saveUpdates">Apply</button>
+  </section>
+  <script>
+    const $ = id => document.getElementById(id);
+    const pendingUpdates = {systemLog: false, mqtt: false};
+    function renderUpdatesPending() {
+      $('systemLogControl').classList.toggle('pending', pendingUpdates.systemLog);
+      $('mqttControl').classList.toggle('pending', pendingUpdates.mqtt);
+    }
+    async function request(path, options) {
+      const response = await fetch(path, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || response.statusText);
+      return data;
+    }
+    function render(s) {
+      ['desiredState','workerState','socketState','mqttConnected','uptimeSeconds','lastError','mqttError'].forEach(k => $(k).textContent = s[k] ?? '—');
+      $('streams').textContent = (s.streams || []).join(', ') || '—';
+    }
+    async function refresh() {
+      try {
+        const [status, updates] = await Promise.all([request('/status'), request('/live-updates')]);
+        render(status);
+        if (!pendingUpdates.systemLog) $('systemLog').checked = updates.systemLog;
+        if (!pendingUpdates.mqtt) $('mqtt').checked = updates.mqtt;
+      } catch (e) { $('message').textContent = 'Refresh error: ' + e.message; }
+    }
+    ['systemLog', 'mqtt'].forEach(id => $(id).addEventListener('change', () => {
+      pendingUpdates[id] = true;
+      renderUpdatesPending();
+    }));
+    document.querySelectorAll('[data-command]').forEach(button => button.onclick = async () => {
+      try { const result = await request('/' + button.dataset.command, {method: 'POST'}); $('message').textContent = 'Command succeeded: ' + result.command; refresh(); }
+      catch (e) { $('message').textContent = 'Command failed: ' + e.message; }
+    });
+    $('saveUpdates').onclick = async () => {
+      try {
+        const s = await request('/live-updates?systemLog=' + $('systemLog').checked + '&mqtt=' + $('mqtt').checked, {method: 'POST'});
+        pendingUpdates.systemLog = false;
+        pendingUpdates.mqtt = false;
+        renderUpdatesPending();
+        $('message').textContent = 'Runtime settings updated';
+        $('systemLog').checked = s.systemLog;
+        $('mqtt').checked = s.mqtt;
+      } catch (e) { $('message').textContent = 'Update failed: ' + e.message; }
+    };
+    refresh(); setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
